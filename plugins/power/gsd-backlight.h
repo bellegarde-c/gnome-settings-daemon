@@ -1,5 +1,5 @@
 /* -*- mode: c; style: linux -*-
- * 
+ *
  * Copyright (C) 2017 Red Hat, Inc.
  *
  * Written by: Benjamin Berg <bberg@redhat.com>
@@ -26,7 +26,6 @@
 
 #define GNOME_DESKTOP_USE_UNSTABLE_API
 #include <libgnome-desktop/gnome-rr.h>
-
 
 G_BEGIN_DECLS
 
@@ -74,7 +73,6 @@ const char*  gsd_backlight_get_connector (GsdBacklight         *backlight);
 
 GsdBacklight* gsd_backlight_new          (GnomeRRScreen        *screen,
                                           GError              **error);
-
 
 G_END_DECLS
 

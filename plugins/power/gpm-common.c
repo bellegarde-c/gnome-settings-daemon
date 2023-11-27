@@ -454,3 +454,71 @@ play_loop_stop (guint *id)
         g_source_remove (*id);
         *id = 0;
 }
+
+static inline gdouble
+x_for_t (gdouble t,
+         gdouble x_1,
+         gdouble x_2)
+{
+        gdouble omt = 1.0 - t;
+
+        return 3.0 * omt * omt * t * x_1
+             + 3.0 * omt * t * t * x_2
+             + t * t * t;
+}
+
+static inline gdouble
+y_for_t (gdouble t,
+         gdouble y_1,
+         gdouble y_2)
+{
+        gdouble omt = 1.0 - t;
+
+        return 3.0 * omt * omt * t * y_1
+             + 3.0 * omt * t * t * y_2
+             + t * t * t;
+}
+
+static inline gdouble
+t_for_x (gdouble x,
+         gdouble x_1,
+         gdouble x_2)
+{
+        gdouble min_t = 0, max_t = 1;
+        int i;
+
+        for (i = 0; i < 30; ++i)
+        {
+                gdouble guess_t = (min_t + max_t) / 2.0;
+                gdouble guess_x = x_for_t (guess_t, x_1, x_2);
+
+                if (x < guess_x)
+                        max_t = guess_t;
+                else
+                        min_t = guess_t;
+        }
+
+        return (min_t + max_t) / 2.0;
+}
+
+/* From clutter/clutter-easing.c */
+/* Credit to Emmanuele Bassi */
+/* LPGL 2.1 */
+gdouble
+clutter_ease_cubic_bezier (gdouble t,
+                           gdouble d,
+                           gdouble x_1,
+                           gdouble y_1,
+                           gdouble x_2,
+                           gdouble y_2)
+{
+        gdouble p = t / d;
+
+        if (p == 0.0)
+                return 0.0;
+
+        if (p == 1.0)
+                return 1.0;
+
+        return y_for_t (t_for_x (p, x_1, x_2), y_1, y_2);
+}

@@ -75,6 +75,33 @@ def mutter_at_least(version):
     # assume equal
     return True
 
+def x_for_t(t, x_1, x_2):
+    omt = 1.0 - t
+    return 3.0 * omt * omt * t * x_1 + 3.0 * omt * t * t * x_2 + t * t * t
+
+def y_for_t(t, y_1, y_2):
+    omt = 1.0 - t
+    return 3.0 * omt * omt * t * y_1 + 3.0 * omt * t * t * y_2 + t * t * t
+
+def t_for_x(x, x_1, x_2):
+    min_t, max_t = 0, 1
+    for i in range(30):
+        guess_t = (min_t + max_t) / 2.0
+        guess_x = x_for_t(guess_t, x_1, x_2)
+        if x < guess_x:
+            max_t = guess_t
+        else:
+            min_t = guess_t
+    return (min_t + max_t) / 2.0
+
+def clutter_ease_cubic_bezier(t, d, x_1, y_1, x_2, y_2):
+    p = t / d
+    if p == 0.0:
+        return 0.0
+    if p == 1.0:
+        return 1.0
+    return y_for_t(t_for_x(p, x_1, x_2), y_1, y_2)
+
 class PowerPluginBase(gsdtestcase.GSDTestCase):
     '''Test the power plugin'''
 
@@ -82,6 +109,8 @@ class PowerPluginBase(gsdtestcase.GSDTestCase):
     gsd_plugin_case = 'Power'
 
     COMMON_SUSPEND_METHODS=['Suspend', 'Hibernate', 'SuspendThenHibernate']
+
+    brightness_map = {}
 
     def setUp(self):
         self.mock_external_monitor_file = os.path.join(self.workdir, 'GSD_MOCK_EXTERNAL_MONITOR')
@@ -229,12 +258,17 @@ class PowerPluginBase(gsdtestcase.GSDTestCase):
             max_brightness += 1
             brightness += 1
 
+        for i in range(101):
+            self.brightness_map[i] = int(clutter_ease_cubic_bezier(i, 100, .1, .05, .87, .12) * 100)
+
         # This needs to be done before starting gsd-power!
         self.backlight = self.testbed.add_device('backlight', 'mock_backlight', None,
                                                  ['type', _type,
                                                   'max_brightness', str(max_brightness),
-                                                  'brightness', str(brightness)],
+                                                  'brightness', str(self.brightness_map[brightness]),
+                                                  'scale', 'linear'],
                                                  [])
+
 
     def get_brightness(self):
         max_brightness = int(open(os.path.join(self.testbed.get_root_dir() + self.backlight, 'max_brightness')).read())
@@ -453,7 +487,7 @@ class PowerPluginTest1(PowerPluginBase):
         self.reset_idle_timer()
         self.check_unblank(2)
         if not self.skip_sysfs_backlight:
-            self.assertTrue(self.get_brightness() == gsdpowerconstants.GSD_MOCK_DEFAULT_BRIGHTNESS , 'incorrect unblanked brightness (%d != %d)' % (self.get_brightness(), gsdpowerconstants.GSD_MOCK_DEFAULT_BRIGHTNESS))
+            self.assertTrue(self.get_brightness() == self.brightness_map[gsdpowerconstants.GSD_MOCK_DEFAULT_BRIGHTNESS] , 'incorrect unblanked brightness (%d != %d)' % (self.get_brightness(), self.brightness_map[gsdpowerconstants.GSD_MOCK_DEFAULT_BRIGHTNESS]))
 
         # Check for no blank before the normal blank timeout
         self.check_no_blank(gsdpowerconstants.SCREENSAVER_TIMEOUT_BLANK - 4)
@@ -721,7 +755,7 @@ class PowerPluginTest5(PowerPluginBase):
         time.sleep(2)
         if not self.skip_sysfs_backlight:
             level = self.get_brightness();
-            self.assertTrue(level == dim_level, 'incorrect dim brightness (%d != %d)' % (level, dim_level))
+            self.assertTrue(level == self.brightness_map[dim_level], 'incorrect dim brightness (%d != %d)' % (level, dim_level))
 
         self.assertEqual(self.get_status(), gsdpowerenums.GSM_PRESENCE_STATUS_AVAILABLE)
 
@@ -742,7 +776,7 @@ class PowerPluginTest5(PowerPluginBase):
 
         # And check that we have the pre-dim brightness
         if not self.skip_sysfs_backlight:
-            self.assertTrue(self.get_brightness() == gsdpowerconstants.GSD_MOCK_DEFAULT_BRIGHTNESS , 'incorrect unblanked brightness (%d != %d)' % (self.get_brightness(), gsdpowerconstants.GSD_MOCK_DEFAULT_BRIGHTNESS))
+            self.assertTrue(self.get_brightness() == self.brightness_map[gsdpowerconstants.GSD_MOCK_DEFAULT_BRIGHTNESS] , 'incorrect unblanked brightness (%d != %d)' % (self.get_brightness(), self.brightness_map[gsdpowerconstants.GSD_MOCK_DEFAULT_BRIGHTNESS]))
 
     def test_lid_close_inhibition(self):
         '''Check that we correctly inhibit suspend with an external monitor'''
@@ -1102,13 +1136,13 @@ class PowerPluginTest8(PowerPluginBase):
         start = time.time()
         # We start at 50% and step by 5% each time
         obj_gsd_power_screen_iface.StepUp()
-        self.assertEqual(self.get_brightness(), 55)
+        self.assertEqual(self.get_brightness(), self.brightness_map[55])
         obj_gsd_power_screen_iface.StepUp()
-        self.assertEqual(self.get_brightness(), 60)
+        self.assertEqual(self.get_brightness(), self.brightness_map[60])
         obj_gsd_power_screen_iface.StepUp()
-        self.assertEqual(self.get_brightness(), 65)
+        self.assertEqual(self.get_brightness(), self.brightness_map[65])
         obj_gsd_power_screen_iface.StepUp()
-        self.assertEqual(self.get_brightness(), 70)
+        self.assertEqual(self.get_brightness(), self.brightness_map[70])
         stop = time.time()
         # This needs to take more than 0.8 seconds as each write is delayed by
         # 0.2 seconds by the test backlight helper
@@ -1143,7 +1177,7 @@ class PowerPluginTest8(PowerPluginBase):
         # others must have been received too.
         self.assertEqual(replies[0], 4)
         # Four steps down, so back at 50%
-        self.assertEqual(self.get_brightness(), 50)
+        self.assertEqual(self.get_brightness(), self.brightness_map[50])
         # And compression must have happened, so it should take less than 0.8s
         self.assertLess(stop - start, 0.8)
 
@@ -1172,7 +1206,7 @@ class PowerPluginTest8(PowerPluginBase):
         # 0.4 seconds. If compression does not work as expected, this would take
         # more than 5 seconds for the 20 steps.
         time.sleep(2.0)
-        self.assertEqual(self.get_brightness(), 90)
+        self.assertEqual(self.get_brightness(), self.brightness_map[90])
 
     def test_brightness_uevent(self):
         if self.skip_sysfs_backlight:
@@ -1188,7 +1222,7 @@ class PowerPluginTest8(PowerPluginBase):
         # Check that the brightness is updated if it was changed through some
         # other mechanism (e.g. firmware).
         # Set to 80+1 because of the GSD offset (see add_backlight).
-        self.testbed.set_attribute(self.backlight, 'brightness', '81')
+        self.testbed.set_attribute(self.backlight, 'brightness', str(self.brightness_map[81]))
         self.testbed.uevent(self.backlight, 'change')
 
         self.check_plugin_log('GsdBacklight: Got uevent', 1, 'gsd-power did not process uevent')
@@ -1305,6 +1339,30 @@ class PowerPluginTest8(PowerPluginBase):
         time.sleep(0.5)
         holds = obj_props.Get('net.hadess.PowerProfiles', 'ActiveProfileHolds')
         self.assertEqual(len(holds), 0)
+
+class PowerPluginTest9(PowerPluginTest8):
+    def add_backlight(self, _type="raw"):
+        max_brightness, brightness = self.backlight_defaults()
+
+        if max_brightness is None:
+            self.backlight = None
+            return
+
+        # Undo mangling done in GSD
+        if max_brightness >= 99:
+            max_brightness += 1
+            brightness += 1
+
+        for i in range(101):
+            self.brightness_map[i] = i
+
+        # This needs to be done before starting gsd-power!
+        self.backlight = self.testbed.add_device('backlight', 'mock_backlight', None,
+                                                 ['type', _type,
+                                                  'max_brightness', str(max_brightness),
+                                                  'brightness', str(self.brightness_map[brightness]),
+                                                  'scale', 'non-linear'],
+                                                 [])
 
 # avoid writing to stderr
 unittest.main(testRunner=unittest.TextTestRunner(stream=sys.stdout, verbosity=2))

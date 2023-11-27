@@ -136,9 +136,9 @@ if get_option('b_sanitize').split(',').contains('address')
   envs.set('POWER_LD_PRELOAD', 'libasan.so.5')
 endif
 
-foreach i : [ 1, 2, 3, 4, 5, 6, 7, 8 ]
+foreach i : [ 1, 2, 3, 4, 5, 6, 7, 8, 9 ]
   test(
-    'test-power @0@/8'.format(i),
+    'test-power @0@/9'.format(i),
     test_py,
     args: [ 'PowerPluginTest@0@'.format(i) ],
     env: envs,
@@ -146,4 +146,3 @@ foreach i : [ 1, 2, 3, 4, 5, 6, 7, 8 ]
     timeout: i == 1 ? 180 : 120
   )
 endforeach
-

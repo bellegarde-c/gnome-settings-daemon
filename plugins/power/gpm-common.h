@@ -38,7 +38,7 @@ void             reset_idletime                         (void);
 /* Backlight helpers */
 
 /* on ACPI machines we have 4-16 levels, on others it's ~150 */
-#define BRIGHTNESS_STEP_AMOUNT(max) ((max) < 20 ? 1 : (max) / 20)
+#define BRIGHTNESS_STEP_AMOUNT(max) ((max) < 20 ? 1 : 100 / 20)
 
 #define ABS_TO_PERCENTAGE(min, max, value) gsd_power_backlight_abs_to_percentage(min, max, value)
 #define PERCENTAGE_TO_ABS(min, max, value) gsd_power_backlight_percentage_to_abs(min, max, value)
@@ -53,6 +53,13 @@ gboolean         external_monitor_is_connected          (GnomeRRScreen *screen);
 /* Sound helpers */
 void             play_loop_start                        (guint *id);
 void             play_loop_stop                         (guint *id);
+
+gdouble          clutter_ease_cubic_bezier              (gdouble t,
+                                                         gdouble d,
+                                                         gdouble x_1,
+                                                         gdouble y_1,
+                                                         gdouble x_2,
+                                                         gdouble y_2);
 
 G_END_DECLS
 
