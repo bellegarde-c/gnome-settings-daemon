@@ -6,5 +6,20 @@
       <summary>Disables enabling display on wakeup from suspend</summary>
       <description>If the display should not be woken up on resume from suspend. On a mobile device you most likely want to enable this.</description>
     </key>
+    <key name="auto-brightness-linear" type="b">
+      <default>true</default>
+      <summary>Set brightness linear</summary>
+      <description>Set auto brightness in linear mode </description>
+    </key>
+    <key name="linear-brightness-points" type="a{ii}">
+      <default>{1: 2, 500: 10, 2000: 15, 3000: 25, 5000: 50, 7500: 80, 9000: 100}</default>
+      <summary>Dictionnary of points for brightness calculation</summary>
+      <description>
+        Key is amblient light, value is the brightness in %. Ambient keys should be sorted.
+        Example: {5: 5}, {30: 10}, {200: 25}
+           - brightness will be 5 if ambient less than 5.
+           - brightness will be 25 if ambient less than 200.
+      </description>
+    </key>
   </schema>
 </schemalist>
