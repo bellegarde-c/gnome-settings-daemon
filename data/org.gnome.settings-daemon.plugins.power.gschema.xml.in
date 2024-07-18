@@ -36,6 +36,16 @@
       <summary>Enable the ALS sensor</summary>
       <description>If the ambient light sensor functionality is enabled.</description>
     </key>
+    <key name="ambient-normalize" type="d">
+      <default>0.0</default>
+      <summary>Normalize ambient values</summary>
+      <description>Add value to ALS sensor lux reading.</description>
+    </key>
+    <key name="ambient-brightness-points" type="a{ii}">
+      <default>{1: 1, 1000: 10, 2000: 20, 3000: 30, 4000: 40, 5000: 50, 6000: 60, 7000: 70, 8000: 80, 9000: 90, 10000: 100}</default>
+      <summary>Dictionnary of points for brightness calculation</summary>
+      <description>Key is amblient light, value is the brightness in %. Ambient keys should be sorted.</description>
+    </key>
     <key name="power-button-action" enum="org.gnome.settings-daemon.GsdPowerButtonActionType">
       <default>'suspend'</default>
       <summary>Power button action</summary>
