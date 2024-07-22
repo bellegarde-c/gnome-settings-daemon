@@ -3205,8 +3205,8 @@ gsd_power_manager_start (GsdPowerManager *manager,
         manager->linear_brightness_ramp_id = 0;
 
         manager->linear_brightness_points = g_settings_get_value (
-                                               manager->settings_droidian_power,
-                                               "linear-brightness-points");
+                                               manager->settings,
+                                               "ambient-brightness-points");
         gnome_settings_profile_end (NULL);
         return TRUE;
 }
@@ -3354,10 +3354,6 @@ backlight_brightness_step_cb (GObject *object,
 
         manager = g_object_get_data (G_OBJECT (invocation), "gsd-power-manager");
         brightness = gsd_backlight_set_brightness_finish (backlight, res, &error);
-
-        /* ambient brightness no longer valid */
-        manager->ambient_percentage_old = brightness;
-        manager->ambient_norm_required = TRUE;
 
         if (error) {
                 g_dbus_method_invocation_take_error (invocation,
