@@ -3052,7 +3052,7 @@ iio_proxy_changed (GsdPowerManager *manager)
 
                 manager->ambient_accumulator = (alpha * brightness) +
                 (1.0 - alpha) * manager->ambient_accumulator;
-
+                g_warning("acc: %f, brightness: %f, alpha: %f", manager->ambient_accumulator, brightness, alpha);
                 /* no valid readings yet */
                 if (manager->ambient_accumulator < 0.f)
                         goto out;
