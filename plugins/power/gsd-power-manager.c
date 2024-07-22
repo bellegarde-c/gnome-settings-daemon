@@ -187,16 +187,11 @@ struct _GsdPowerManager
         /* Ambient */
         GDBusProxy              *iio_proxy;
         guint                    iio_proxy_watch_id;
-        gboolean                 ambient_norm_required;
-        gdouble                  ambient_accumulator;
-        gdouble                  ambient_norm_value;
-        gdouble                  ambient_percentage_old;
-        gdouble                  ambient_last_absolute;
-        gint64                   ambient_last_time;
 
         /* Linear brightness */
         GVariant                *linear_brightness_points;
         gint                     linear_brightness;
+        gdouble                  linear_brightness_ambient;
         gint                     linear_brightness_ambient_up;
         gint                     linear_brightness_ambient_down;
         guint                    linear_brightness_delay_id;
@@ -2574,19 +2569,6 @@ idle_became_active_cb (GnomeIdleMonitor *monitor,
 }
 
 static void
-ch_backlight_renormalize (GsdPowerManager *manager)
-{
-        if (manager->ambient_percentage_old < 0)
-                return;
-        if (manager->ambient_last_absolute < 0)
-                return;
-        manager->ambient_norm_value = manager->ambient_last_absolute /
-                                        (gdouble) manager->ambient_percentage_old;
-        manager->ambient_norm_value *= 100.f;
-        manager->ambient_norm_required = FALSE;
-}
-
-static void
 engine_settings_key_changed_cb (GSettings *settings,
                                 const gchar *key,
                                 GsdPowerManager *manager)
@@ -2976,9 +2958,9 @@ on_rr_screen_acquired (GObject      *object,
            (likely, considering that to get here we need a reply from gnome-shell)
         */
         if (manager->backlight) {
-                manager->ambient_percentage_old = gsd_backlight_get_brightness (manager->backlight, NULL);
+                gint brightness = gsd_backlight_get_brightness (manager->backlight, NULL);
                 backlight_iface_emit_changed (manager, GSD_POWER_DBUS_INTERFACE_SCREEN,
-                                              manager->ambient_percentage_old, NULL);
+                                              brightness, NULL);
         } else {
                 backlight_iface_emit_changed (manager, GSD_POWER_DBUS_INTERFACE_SCREEN, -1, NULL);
         }
@@ -3012,58 +2994,20 @@ iio_proxy_changed (GsdPowerManager *manager)
         if (val_als == NULL || g_variant_get_double (val_als) == 0.0)
                 goto out;
 
-        manager->ambient_last_absolute = g_variant_get_double (val_als);
-        g_debug ("Read last absolute light level: %f", manager->ambient_last_absolute);
+        manager->linear_brightness_ambient = g_variant_get_double (val_als);
+        g_debug ("Read last absolute light level: %f", manager->linear_brightness_ambient);
 
-        if (g_settings_get_boolean (manager->settings_droidian_power, "auto-brightness-linear")) {
-                if (manager->ambient_last_absolute > manager->linear_brightness_ambient_up ||
-                    manager->ambient_last_absolute <= manager->linear_brightness_ambient_down) {
-                        if (manager->linear_brightness_delay_id == 0) {
-                                manager->linear_brightness_delay_id = g_timeout_add(
-                                                GSD_LINEAR_BRIGHTNESS_DELAY,
-                                                (GSourceFunc) set_linear_brightness,
-                                                manager);
-                        }
-                } else {
-                        g_clear_handle_id (&manager->linear_brightness_delay_id,
-                                           g_source_remove);
+        if (manager->linear_brightness_ambient > manager->linear_brightness_ambient_up ||
+            manager->linear_brightness_ambient <= manager->linear_brightness_ambient_down) {
+                if (manager->linear_brightness_delay_id == 0) {
+                        manager->linear_brightness_delay_id = g_timeout_add(
+                                        GSD_LINEAR_BRIGHTNESS_DELAY,
+                                        (GSourceFunc) set_linear_brightness,
+                                        manager);
                 }
         } else {
-                /* the user has asked to renormalize */
-                if (manager->ambient_norm_required) {
-                        g_debug ("Renormalizing light level from old light percentage: %.1f%%",
-                                 manager->ambient_percentage_old);
-                        manager->ambient_accumulator = manager->ambient_percentage_old;
-                        ch_backlight_renormalize (manager);
-                }
-
-                /* time-weighted constant for moving average */
-                current_time = g_get_monotonic_time();
-                if (manager->ambient_last_time)
-                        alpha = 1.0f / (1.0f + (GSD_AMBIENT_TIME_CONSTANT / (current_time - manager->ambient_last_time)));
-                else
-                        alpha = 0.0f;
-                manager->ambient_last_time = current_time;
-
-                /* calculate exponential weighted moving average */
-                brightness = manager->ambient_last_absolute * 100.f / manager->ambient_norm_value;
-                brightness = MIN (brightness, 100.f);
-                brightness = MAX (brightness, 0.f);
-
-                manager->ambient_accumulator = (alpha * brightness) +
-                (1.0 - alpha) * manager->ambient_accumulator;
-                g_warning("last: %f, norm: %f, acc: %f, brightness: %f, alpha: %f",manager->ambient_last_absolute , manager->ambient_norm_value,manager->ambient_accumulator, brightness, alpha);
-                /* no valid readings yet */
-                if (manager->ambient_accumulator < 0.f)
-                        goto out;
-                g_debug ("Setting brightness from ambient %.1f%%",
-                 manager->ambient_accumulator);
-                pc = manager->ambient_accumulator;
-
-                gsd_backlight_set_brightness_async (manager->backlight, pc, NULL, NULL, NULL);
-
-                /* Assume setting worked. */
-                manager->ambient_percentage_old = pc;
+                g_clear_handle_id (&manager->linear_brightness_delay_id,
+                                   g_source_remove);
         }
 
 out:
@@ -3156,7 +3100,7 @@ set_linear_brightness (GsdPowerManager *manager)
         manager->linear_brightness = linear_brightness;
 
         g_debug("linear brightness: %f -> %d",
-                manager->ambient_last_absolute, linear_brightness);
+                manager->linear_brightness_ambient, linear_brightness);
 
         if (manager->linear_brightness_ramp_id == 0) {
                 manager->linear_brightness_ramp_id = g_timeout_add(
@@ -3182,11 +3126,11 @@ get_linear_brightness (GsdPowerManager *manager)
         while (g_variant_iter_loop (iter, "{ii}", &light_level, &brightness_level)) {
                 manager->linear_brightness_ambient_up = light_level;
 
-                if ((gint) manager->ambient_last_absolute <= light_level) {
+                if ((gint) manager->linear_brightness_ambient <= light_level) {
                         gint linear_level = light_level - manager->linear_brightness_ambient_down;
                         gint linear_brightness = brightness_level - lower_brightness_level;
                         return (
-                                ((gint) manager->ambient_last_absolute - manager->linear_brightness_ambient_down) *
+                                ((gint) manager->linear_brightness_ambient - manager->linear_brightness_ambient_down) *
                                  linear_brightness / linear_level
                                ) + lower_brightness_level;
                 }
@@ -3254,12 +3198,7 @@ gsd_power_manager_start (GsdPowerManager *manager,
                                   iio_proxy_appeared_cb,
                                   iio_proxy_vanished_cb,
                                   manager, NULL);
-        manager->ambient_norm_required = TRUE;
-        manager->ambient_accumulator = -1.f;
-        manager->ambient_norm_value = -1.f;
-        manager->ambient_percentage_old = -1.f;
-        manager->ambient_last_absolute = -1.f;
-        manager->ambient_last_time = 0;
+        manager->linear_brightness_ambient = -1.f;
 
         manager->linear_brightness_ambient_up = 0;
         manager->linear_brightness_ambient_down = 0;
@@ -3431,27 +3370,6 @@ backlight_brightness_step_cb (GObject *object,
                                                                       brightness,
                                                                       connector ? connector : ""));
         }
-}
-
-/* Callback */
-static void
-backlight_brightness_set_cb (GObject *object,
-                             GAsyncResult *res,
-                             gpointer user_data)
-{
-        GsdPowerManager *manager = GSD_POWER_MANAGER (user_data);
-        GsdBacklight *backlight = GSD_BACKLIGHT (object);
-        gint brightness;
-
-        /* Return the invocation. */
-        brightness = gsd_backlight_set_brightness_finish (backlight, res, NULL);
-
-        if (brightness >= 0) {
-                manager->ambient_percentage_old = brightness;
-                manager->ambient_norm_required = TRUE;
-        }
-
-        g_object_unref (manager);
 }
 
 static void
@@ -3645,7 +3563,7 @@ handle_set_property_other (GsdPowerManager *manager,
                         if (manager->linear_brightness_ramp_id == 0)
                                 gsd_backlight_set_brightness_async (manager->backlight, brightness_value,
                                                                     manager->linear_cancellable,
-                                                                    backlight_brightness_set_cb, g_object_ref (manager));
+                                                                    NULL, NULL);
                         return TRUE;
                 } else {
                         g_set_error_literal (error, GSD_POWER_MANAGER_ERROR, GSD_POWER_MANAGER_ERROR_NO_BACKLIGHT,
