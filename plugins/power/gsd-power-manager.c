@@ -253,7 +253,6 @@ static void      iio_proxy_changed (GsdPowerManager *manager);
 static void      iio_proxy_changed_cb (GDBusProxy *proxy, GVariant *changed_properties, GStrv invalidated_properties, gpointer user_data);
 static gint      get_linear_brightness (GsdPowerManager *manager);
 static gboolean  set_linear_brightness (GsdPowerManager *manager);
-static void      backlight_linear_brightness_set_cb (GObject *object, GAsyncResult *res, gpointer user_data);
 
 G_DEFINE_TYPE (GsdPowerManager, gsd_power_manager, G_TYPE_OBJECT)
 
@@ -3070,7 +3069,6 @@ set_backlight_brightness (GsdPowerManager *manager)
                 target_brightness = backlight_brightness + 1;
         } else if (manager->linear_brightness < backlight_brightness) {
                 target_brightness = backlight_brightness - 1;
-
         }
 
         if (manager->linear_cancellable != NULL) {
@@ -3082,8 +3080,7 @@ set_backlight_brightness (GsdPowerManager *manager)
         gsd_backlight_set_brightness_async (manager->backlight,
                                             target_brightness,
                                             manager->linear_cancellable,
-                                            backlight_linear_brightness_set_cb,
-                                            g_object_ref (manager));
+                                            NULL, NULL);
         return G_SOURCE_REMOVE;
 }
 
@@ -3400,30 +3397,6 @@ backlight_brightness_step_cb (GObject *object,
 }
 
 static void
-backlight_linear_brightness_set_cb (GObject *object,
-                                    GAsyncResult *res,
-                                    gpointer user_data)
-        {
-        GsdPowerManager *manager = GSD_POWER_MANAGER (user_data);
-        GsdBacklight *backlight = GSD_BACKLIGHT (object);
-        gint brightness;
-
-        /* Return the invocation. */
-        brightness = gsd_backlight_set_brightness_finish (backlight, res, NULL);
-
-        if (brightness == manager->linear_brightness) {
-                manager->linear_brightness_ramp_id = 0;
-        } else {
-                manager->linear_brightness_ramp_id = g_timeout_add(
-                                GSD_LINEAR_BRIGHTNESS_RAMP,
-                                (GSourceFunc) set_backlight_brightness,
-                                manager);
-        }
-
-        g_object_unref (manager);
-}
-
-static void
 handle_method_call_screen (GsdPowerManager *manager,
                            const gchar *method_name,
                            GVariant *parameters,
@@ -3584,8 +3557,16 @@ handle_set_property_other (GsdPowerManager *manager,
                  * But none of our DBus API users actually read the result. */
                 g_variant_get (value, "i", &brightness_value);
                 if (manager->backlight) {
-                        /* Some clients send us back brightness updates */
-                        if (manager->linear_brightness_ramp_id == 0) {
+                        if (manager->linear_brightness_ramp_id != 0) {
+                                if (brightness_value == manager->linear_brightness) {
+                                        manager->linear_brightness_ramp_id = 0;
+                                } else {
+                                        manager->linear_brightness_ramp_id = g_timeout_add(
+                                                        GSD_LINEAR_BRIGHTNESS_RAMP,
+                                                        (GSourceFunc) set_backlight_brightness,
+                                                        manager);
+                                }
+                        } else {
                                 gdouble normalize = get_ambient_for_linear_brightness (manager, brightness_value);
                                 g_settings_set_double(manager->settings,
                                                       "ambient-normalize",
