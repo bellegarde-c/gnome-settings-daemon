@@ -2973,10 +2973,6 @@ iio_proxy_changed (GsdPowerManager *manager)
 {
         GVariant *val_has = NULL;
         GVariant *val_als = NULL;
-        gdouble brightness;
-        gdouble alpha;
-        gint64 current_time;
-        gint pc;
 
         /* no display hardware */
         if (!manager->backlight)
@@ -3347,12 +3343,10 @@ backlight_brightness_step_cb (GObject *object,
 {
         GsdBacklight *backlight = GSD_BACKLIGHT (object);
         GDBusMethodInvocation *invocation = G_DBUS_METHOD_INVOCATION (user_data);
-        GsdPowerManager *manager;
         GError *error = NULL;
         const char *connector;
         gint brightness;
 
-        manager = g_object_get_data (G_OBJECT (invocation), "gsd-power-manager");
         brightness = gsd_backlight_set_brightness_finish (backlight, res, &error);
 
         if (error) {
