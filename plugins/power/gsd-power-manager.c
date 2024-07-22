@@ -194,7 +194,6 @@ struct _GsdPowerManager
         GsdPowerLightLevelUnit   linear_brightness_ambient_unit;
         gint                     linear_brightness_ambient_up;
         gint                     linear_brightness_ambient_down;
-        gint64                   linear_brightness_last_time;
         guint                    linear_brightness_delay_id;
         guint                    linear_brightness_ramp_id;
         GCancellable            *linear_cancellable;
@@ -3067,11 +3066,6 @@ set_backlight_brightness (GsdPowerManager *manager)
 
         gsd_backlight_get_brightness (manager->backlight, &backlight_brightness);
 
-        if (backlight_brightness == manager->linear_brightness) {
-                manager->linear_brightness_ramp_id = 0;
-                return G_SOURCE_REMOVE;
-        }
-
         if (manager->linear_brightness > backlight_brightness) {
                 target_brightness = backlight_brightness + 1;
         } else if (manager->linear_brightness < backlight_brightness) {
@@ -3085,7 +3079,6 @@ set_backlight_brightness (GsdPowerManager *manager)
         }
         manager->linear_cancellable = g_cancellable_new ();
 
-        manager->linear_brightness_last_time = g_get_monotonic_time();
         gsd_backlight_set_brightness_async (manager->backlight,
                                             target_brightness,
                                             manager->linear_cancellable,
@@ -3237,7 +3230,6 @@ gsd_power_manager_start (GsdPowerManager *manager,
                                   iio_proxy_vanished_cb,
                                   manager, NULL);
 
-        manager->linear_brightness_last_time = g_get_monotonic_time();
         manager->linear_brightness_ambient = -1.f;
         manager->linear_brightness_ambient_iio = -1.f;
         manager->linear_brightness_ambient_up = 0;
@@ -3593,7 +3585,7 @@ handle_set_property_other (GsdPowerManager *manager,
                 g_variant_get (value, "i", &brightness_value);
                 if (manager->backlight) {
                         /* Some clients send us back brightness updates */
-                        if (g_get_monotonic_time() - manager->linear_brightness_last_time > G_USEC_PER_SEC) {
+                        if (manager->linear_brightness_ramp_id == 0) {
                                 gdouble normalize = get_ambient_for_linear_brightness (manager, brightness_value);
                                 g_settings_set_double(manager->settings,
                                                       "ambient-normalize",
