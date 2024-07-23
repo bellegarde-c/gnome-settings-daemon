@@ -42,7 +42,7 @@
       <description>Add value to ALS sensor lux reading.</description>
     </key>
     <key name="ambient-brightness-points" type="a{ii}">
-      <default>{}</default>
+      <default>{1: 2, 500: 10, 1000: 15, 2000: 20, 3000: 25, 3500: 30, 4000: 35, 4500: 40, 5000: 50, 6000: 70, 7000: 75, 7500: 80, 9000: 100}</default>
       <summary>Dictionnary of ambient points for brightness calculation</summary>
       <description>
         Key is ambient light as lux, value is the brightness as %. Ambient keys should be sorted.
